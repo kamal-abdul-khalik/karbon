@@ -14,7 +14,7 @@ st.set_page_config(
 
 # --- Variabel Global dan Konfigurasi API ---
 # Gunakan kunci API kosong sesuai instruksi. Lingkungan Canvas akan mengisinya saat runtime.
-API_KEY = "" 
+API_KEY = "AIzaSyCXkh0Sv0fQtPIXpK5AyXCYPyudmgqTlNk" 
 GEMINI_MODEL_NAME = "gemini-2.0-flash"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent?key={API_KEY}"
 

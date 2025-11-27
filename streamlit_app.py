@@ -83,7 +83,7 @@ if image is not None:
                     
                     # Gunakan model gemini-1.5-flash untuk kecepatan dan stabilitas
                     # (Bisa diganti gemini-2.0-flash-exp jika akses tersedia)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.0-flash')
 
                     # 2. Prompt Khusus EcoScan
                     prompt_ecoscan = """

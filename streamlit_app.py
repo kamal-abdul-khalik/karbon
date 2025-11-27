@@ -1,6 +1,6 @@
 import streamlit as st
 import base64
-import requests
+import requests 
 import json
 import time
 
@@ -26,15 +26,16 @@ def image_to_base64(uploaded_file):
 
 # Fungsi untuk memanggil Gemini API (Multimodal/Vision)
 def get_eco_analysis(base64_image):
-    """Menganalisis struk dan menghitung skor karbon."""
+    """Memanggil Gemini API untuk menganalisis struk dan menghitung skor karbon."""
     
-    # Prompt System: Mengarahkan peran dan format output AI
+    # Prompt System BARU: Menambahkan instruksi fokus OCR dan penanganan gambar buram
     system_prompt = (
         "Anda adalah AI Analis Karbon. Tugas Anda adalah: "
-        "1. Lakukan OCR dan ekstrak daftar item, harganya, dan kategorikan dampaknya (misal: 'Daging Merah', 'Lokal Sayuran', 'Kemasan Plastik'). "
-        "2. Berikan 'Skor Dampak Karbon' total (dari 1 hingga 10, di mana 10 adalah dampak tertinggi) berdasarkan item yang paling berdampak. "
-        "3. Berikan 'Eco-Insight' sederhana: satu tips yang dapat ditindaklanjuti untuk mengurangi skor di masa depan."
-        "4. Format SEMUA output Anda sebagai JSON untuk parsing yang andal. Jika struk tidak terbaca jelas, kembalikan JSON dengan status 'Error'."
+        "1. **Gunakan teknologi OCR yang canggih untuk membaca teks struk. Prioritaskan dan fokus hanya pada NAMA ITEM dan HARGA.** Abaikan background, logo, atau teks yang buram/tidak relevan. "
+        "2. Ekstrak daftar item, harganya, dan kategorikan dampaknya (misal: 'Daging Merah', 'Lokal Sayuran', 'Kemasan Plastik'). "
+        "3. Berikan 'Skor Dampak Karbon' total (dari 1 hingga 10, di mana 10 adalah dampak tertinggi) berdasarkan item yang paling berdampak. "
+        "4. Berikan 'Eco-Insight' sederhana: satu tips yang dapat ditindaklanjuti untuk mengurangi skor di masa depan."
+        "5. Format SEMUA output Anda sebagai JSON untuk parsing yang andal. Jika struk benar-benar tidak terbaca setelah upaya maksimal, kembalikan JSON dengan status 'Error'."
     )
     
     user_query = "Tolong analisis struk belanja ini untuk menghitung jejak karbon dan berikan tips sederhana."
@@ -75,7 +76,8 @@ def get_eco_analysis(base64_image):
                                 "harga": {"type": "STRING"} 
                             }
                         }
-                    },
+                    }
+                    ,
                     "status": {"type": "STRING", "description": "Status hasil: OK atau Error."}
                 }
             }
@@ -83,10 +85,11 @@ def get_eco_analysis(base64_image):
     }
 
     # Implementasi Exponential Backoff untuk retry API
-    max_retries = 5
+    max_retries = 3
     for attempt in range(max_retries):
         try:
-            response = requests.post(
+            # Panggilan API menggunakan requests.post()
+            response = requests.post( 
                 API_URL,
                 headers={'Content-Type': 'application/json'},
                 data=json.dumps(payload)
@@ -123,7 +126,7 @@ def get_eco_analysis(base64_image):
 # --- Tampilan Streamlit Utama ---
 
 st.title("🌱 EcoScan AI: Pemindai Jejak Karbon")
-st.markdown("Aplikasi *simple, kreatif, dan solutif* untuk menganalisis struk belanja, menghitung jejak karbon, dan memberikan tips ramah lingkungan.")
+st.markdown("Aplikasi **simple, kreatif, dan solutif** untuk menganalisis struk belanja, menghitung jejak karbon, dan memberikan tips ramah lingkungan.")
 
 # Pilihan input: Kamera atau Upload File
 input_method = st.radio(
@@ -137,7 +140,7 @@ uploaded_file = None
 
 if input_method == "📸 Ambil Foto Langsung":
     # Streamlit memiliki widget kamera
-    st.info("Pastikan struk berada di tempat yang terang dan rata.")
+    st.info("💡 Tips: Pastikan struk rata, berjarak dekat, dan berada di tempat yang terang untuk hasil OCR terbaik.")
     uploaded_file = st.camera_input("Ambil Foto Struk")
 elif input_method == "⬆️ Unggah File Gambar":
     # Widget upload file
@@ -181,15 +184,15 @@ if uploaded_file is not None:
             progress_value = min(1.0, skor / 10.0) # Pastikan tidak lebih dari 1.0
             
             if skor >= 7:
-                 st.progress(progress_value, text=f"🔴 *Dampak Tinggi:* Fokus pada *{kategori}*")
+                 st.progress(progress_value, text=f"🔴 **Dampak Tinggi:** Fokus pada **{kategori}**")
             elif skor >= 4:
-                 st.progress(progress_value, text=f"🟠 *Dampak Sedang:* Fokus pada *{kategori}*")
+                 st.progress(progress_value, text=f"🟠 **Dampak Sedang:** Fokus pada **{kategori}**")
             else:
-                 st.progress(progress_value, text="🟢 *Dampak Rendah:* Pertahankan pola belanja ini!")
+                 st.progress(progress_value, text="🟢 **Dampak Rendah:** Pertahankan pola belanja ini!")
 
             
             # Eco-Insight (Tips Solutif)
-            st.success(f"💡 *Eco-Insight Sederhana:* {insight}")
+            st.success(f"💡 **Eco-Insight Sederhana:** {insight}")
             st.markdown("---")
             
             # Detail Item yang Diekstrak
@@ -207,4 +210,4 @@ if uploaded_file is not None:
              st.error("❌ Analisis Gagal. Silakan periksa koneksi atau coba lagi.")
 
 
-st.caption("Proyek AI untuk Lingkungan - Ditenagai oleh Gemini 2.5 Flash")
+st.caption("Proyek AI untuk Lingkungan - Ditenagai oleh Gemini 2.0 Flash")

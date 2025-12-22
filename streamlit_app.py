@@ -141,7 +141,7 @@ Scoring: Daging merah +3, Daging putih +1.5, Susu +1, Olahan +2, Plastik +2, Say
 
         # Request dengan response_format JSON mode
         response = client.chat.completions.create(
-            model="sonar-large-online",  # Model vision terbaik
+            model="sonar",  # Model vision terbaik
             messages=[
                 {
                     "role": "user",

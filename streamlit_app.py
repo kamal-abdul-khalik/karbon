@@ -4,6 +4,7 @@ from PIL import Image
 import json
 import os
 import base64
+import re
 from io import BytesIO
 
 # --- KONFIGURASI HALAMAN ---
@@ -43,12 +44,13 @@ st.markdown("""
         border-left: 4px solid #667eea;
         margin: 1rem 0;
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
-        border-radius: 5px;
+    .debug-box {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 1rem;
+        font-family: monospace;
+        font-size: 0.85rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -61,6 +63,35 @@ def image_to_base64(image):
     img_str = base64.b64encode(buffered.getvalue()).decode()
     return f"data:image/png;base64,{img_str}"
 
+def extract_json_from_response(text):
+    """Extract JSON dari response yang mungkin mengandung teks tambahan"""
+    if not text or not text.strip():
+        return None
+    
+    # Coba langsung parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Cari JSON block dalam ``````
+    json_match = re.search(r'``````', text, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+    
+    # Cari objek JSON pertama yang valid
+    json_match = re.search(r'\{[^{}]*?(?:\{[^{}]*\}[^{}]*)*\}', text)
+    if json_match:
+        try:
+            return json.loads(json_match.group(0))
+        except json.JSONDebug:
+            pass
+    
+    return None
+
 def get_skor_color(skor):
     """Tentukan warna berdasarkan skor"""
     if skor <= 3:
@@ -70,67 +101,47 @@ def get_skor_color(skor):
     else:
         return "skor-red", "🔴 Perlu Perbaikan"
 
-def analyze_with_perplexity(image, api_key):
-    """Analisis gambar struk menggunakan Perplexity API dengan web-grounded research"""
+def analyze_with_perplexity(image, api_key, show_debug=False):
+    """Analisis gambar struk dengan robust error handling"""
     try:
         # Inisialisasi client
         client = Perplexity(api_key=api_key)
-        
-        # Konversi gambar ke base64
         image_base64 = image_to_base64(image)
         
-        # Prompt yang lebih komprehensif dan informatif
-        prompt = """
-Kamu adalah Ahli Lingkungan dan Analis Jejak Karbon yang berpengalaman. 
+        # Prompt YANG LEBIH KETAT untuk JSON
+        prompt = """KAMU HARUS MENGGUNAKAN FORMAT JSON INI DAN HANYA JSON. JANGAN TULIS TEKS LAIN.
 
-TUGAS: Analisis struk belanja pada gambar dan berikan assessment jejak karbon yang mendalam.
+Analisis struk belanja dan berikan assessment jejak karbon. Gunakan sistem scoring berikut:
 
-LANGKAH ANALISIS:
-1. **Identifikasi Item**: Deteksi semua produk yang dibeli dari struk
-2. **Kategori Produk**: Kelompokkan produk (Daging Merah, Daging Putih, Produk Susu, Sayuran/Buah, Makanan Olahan, Kemasan Plastik, Produk Organik)
-3. **Skor Jejak Karbon**: Hitung total skor 1-10 berdasarkan:
-   - Daging merah (sapi, kambing): +3 poin
-   - Daging putih (ayam, ikan): +1.5 poin
-   - Produk susu: +1 poin
-   - Makanan ultra-processed: +2 poin
-   - Kemasan plastik berlebihan: +2 poin
-   - Sayuran/buah lokal: -0.5 poin
-   - Produk organik: -0.5 poin
-4. **Eco-Insight**: Berikan 3-5 saran konkret dan actionable
-5. **Alternatif Ramah Lingkungan**: Sarankan pengganti untuk item dengan jejak karbon tinggi
-6. **Fakta Lingkungan**: Tambahkan 1 fakta menarik terkait jejak karbon
+JAWAB HANYA DENGAN JSON SESUAI FORMAT INI:
 
-OUTPUT FORMAT (JSON tanpa markdown):
 {
-    "skor": 0,
-    "kategori_dominan": "Kategori utama",
-    "detail_item": "Daftar item terdeteksi",
-    "breakdown_skor": {
-        "daging_merah": 0,
-        "daging_putih": 0,
-        "produk_susu": 0,
-        "makanan_olahan": 0,
-        "kemasan_plastik": 0,
-        "sayuran_buah": 0,
-        "produk_organik": 0
-    },
-    "insight": [
-        "Saran 1",
-        "Saran 2",
-        "Saran 3"
-    ],
-    "alternatif": [
-        {"item": "Produk X", "pengganti": "Produk Y", "alasan": "Mengapa lebih baik"}
-    ],
-    "fakta_lingkungan": "Fakta menarik",
-    "estimasi_emisi_kg_co2": 0,
-    "perbandingan": "Setara dengan X km perjalanan mobil"
+  "skor": 5,
+  "kategori_dominan": "Makanan Olahan",
+  "detail_item": "Daftar 3-5 item utama",
+  "breakdown_skor": {
+    "daging_merah": 2,
+    "daging_putih": 1,
+    "produk_susu": 1,
+    "makanan_olahan": 3,
+    "kemasan_plastik": 2,
+    "sayuran_buah": 1,
+    "produk_organik": 0
+  },
+  "insight": ["Saran 1 praktis", "Saran 2", "Saran 3"],
+  "alternatif": [
+    {"item": "Daging Sapi", "pengganti": "Tahu/Tempe", "alasan": "Mengurangi 80% emisi CO2"}
+  ],
+  "fakta_lingkungan": "1kg daging sapi = 27kg CO2",
+  "estimasi_emisi_kg_co2": 4.5,
+  "perbandingan": "Setara 20km perjalanan mobil"
 }
-"""
-        
-        # Request ke Perplexity API dengan vision
+
+Scoring: Daging merah +3, Daging putih +1.5, Susu +1, Olahan +2, Plastik +2, Sayur -0.5, Organik -0.5."""
+
+        # Request dengan response_format JSON mode
         response = client.chat.completions.create(
-            model="sonar",  # Model sonar mendukung image analysis
+            model="sonar-large-online",  # Model vision terbaik
             messages=[
                 {
                     "role": "user",
@@ -139,17 +150,33 @@ OUTPUT FORMAT (JSON tanpa markdown):
                         {"type": "image_url", "image_url": {"url": image_base64}}
                     ]
                 }
-            ]
+            ],
+            temperature=0.1,  # Kurangi randomness untuk JSON konsisten
+            max_tokens=2000
         )
         
-        # Parse response
-        result = json.loads(response.choices[0].message.content)
-        return result, None
+        raw_response = response.choices[0].message.content
         
-    except json.JSONDecodeError as e:
-        return None, f"Error parsing response: {str(e)}"
+        if show_debug:
+            st.markdown("### 🔍 Debug Response")
+            st.code(raw_response, language="json")
+        
+        # Extract dan validate JSON
+        parsed_data = extract_json_from_response(raw_response)
+        
+        if parsed_data is None:
+            return None, f"❌ Gagal parse JSON dari response:\n``````"
+        
+        # Validasi struktur minimal
+        required_keys = ['skor', 'kategori_dominan']
+        missing_keys = [key for key in required_keys if key not in parsed_data]
+        if missing_keys:
+            return None, f"❌ JSON tidak lengkap, kurang: {missing_keys}"
+        
+        return parsed_data, None
+        
     except Exception as e:
-        return None, f"Error: {str(e)}"
+        return None, f"❌ Error API: {str(e)}"
 
 # --- HEADER ---
 st.markdown("""
@@ -163,6 +190,9 @@ st.markdown("""
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Pengaturan")
+    
+    # Debug toggle
+    show_debug = st.checkbox("🔍 Tampilkan Debug Info (untuk troubleshooting)")
     
     # Info penggunaan
     with st.expander("📖 Panduan Penggunaan", expanded=False):
@@ -187,7 +217,7 @@ with st.sidebar:
         placeholder="pplx-..."
     )
     
-    # Gunakan environment variable jika tersedia
+    # Environment variable fallback
     if not api_key:
         api_key = os.environ.get("PERPLEXITY_API_KEY")
         if api_key:
@@ -195,12 +225,8 @@ with st.sidebar:
     
     st.divider()
     
-    # Informasi tentang jejak karbon
     st.markdown("""
     ### 🌍 Tahukah Kamu?
-    
-    **Jejak Karbon** adalah total emisi gas rumah kaca yang dihasilkan dari aktivitas kita.
-    
     **Fakta Penting:**
     - 1 kg daging sapi = 27 kg CO₂
     - 1 kg sayuran = 2 kg CO₂
@@ -212,14 +238,6 @@ with st.sidebar:
 
 # --- MAIN CONTENT ---
 st.markdown("### 📸 Input Struk Belanja")
-
-# Tabs untuk input gambar
-col1, col2 = st.columns(2)
-
-with col1:
-    st.info("💡 **Ambil Foto Langsung**\nGunakan kamera untuk foto struk")
-with col2:
-    st.info("💡 **Upload dari Galeri**\nPilih foto yang sudah ada")
 
 tab1, tab2 = st.tabs(["📷 Kamera", "⬆️ Upload"])
 
@@ -233,34 +251,28 @@ with tab1:
 with tab2:
     upload_file = st.file_uploader(
         "Pilih foto struk",
-        type=['jpg', 'png', 'jpeg'],
-        help="Format: JPG, PNG, JPEG (Maks 200MB)"
+        type=['jpg', 'png', 'jpeg']
     )
     if upload_file:
         image = Image.open(upload_file)
 
 # --- PROSES ANALISIS ---
 if image is not None:
-    # Tampilkan preview gambar
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.image(image, caption="✅ Struk siap dianalisis", use_container_width=True)
+    st.image(image, caption="✅ Struk siap dianalisis", use_container_width=True)
     
-    # Tombol Analisis
     if st.button("🌍 Analisis Jejak Karbon Sekarang!", type="primary", use_container_width=True):
         if not api_key:
             st.error("⚠️ **API Key diperlukan!** Masukkan API Key Perplexity di sidebar.")
         else:
-            with st.spinner('🔍 Sedang menganalisis jejak karbon... Mohon tunggu!'):
-                hasil, error = analyze_with_perplexity(image, api_key)
+            with st.spinner('🔍 Menganalisis jejak karbon...'):
+                hasil, error = analyze_with_perplexity(image, api_key, show_debug)
                 
                 if error:
-                    st.error(f"❌ {error}")
+                    st.error(error)
                 else:
-                    # Tampilkan hasil dengan UI menarik
-                    st.success("✅ **Analisis Selesai!** Berikut adalah hasil assessment jejak karbon Anda:")
+                    st.success("✅ **Analisis Selesai!**")
                     
-                    # --- SKOR UTAMA ---
+                    # Tampilkan hasil
                     st.markdown("### 📊 Skor Jejak Karbon")
                     col1, col2 = st.columns([1, 2])
                     
@@ -281,69 +293,61 @@ if image is not None:
                         <div class="info-card">
                             <h4>📦 Kategori Dominan</h4>
                             <p style="font-size: 1.1rem;"><strong>{hasil.get('kategori_dominan', 'N/A')}</strong></p>
-                            
                             <h4 style="margin-top: 1rem;">🛒 Item Terdeteksi</h4>
                             <p>{hasil.get('detail_item', 'Tidak ada detail')}</p>
-                            
                             <h4 style="margin-top: 1rem;">💨 Estimasi Emisi</h4>
                             <p style="font-size: 1.1rem;"><strong>{hasil.get('estimasi_emisi_kg_co2', 0)} kg CO₂</strong></p>
                             <p style="font-size: 0.9rem; color: #666;">{hasil.get('perbandingan', '')}</p>
                         </div>
                         """, unsafe_allow_html=True)
                     
-                    # --- BREAKDOWN SKOR ---
+                    # Breakdown skor
                     if 'breakdown_skor' in hasil:
-                        st.markdown("### 📈 Breakdown Skor Detil")
+                        st.markdown("### 📈 Breakdown Skor")
                         breakdown = hasil['breakdown_skor']
                         cols = st.columns(4)
                         categories = [
                             ("🥩 Daging Merah", breakdown.get('daging_merah', 0)),
                             ("🍗 Daging Putih", breakdown.get('daging_putih', 0)),
                             ("🥛 Produk Susu", breakdown.get('produk_susu', 0)),
-                            ("🍕 Makanan Olahan", breakdown.get('makanan_olahan', 0)),
-                            ("♻️ Kemasan Plastik", breakdown.get('kemasan_plastik', 0)),
-                            ("🥬 Sayuran/Buah", breakdown.get('sayuran_buah', 0)),
-                            ("🌱 Produk Organik", breakdown.get('produk_organik', 0))
+                            ("🍕 Makanan Olahan", breakdown.get('makanan_olahan', 0))
                         ]
-                        
                         for idx, (label, value) in enumerate(categories):
-                            with cols[idx % 4]:
+                            with cols[idx]:
+                                st.metric(label, f"{value} poin")
+                        
+                        cols = st.columns(3)
+                        categories2 = [
+                            ("♻️ Plastik", breakdown.get('kemasan_plastik', 0)),
+                            ("🥬 Sayur/Buah", breakdown.get('sayuran_buah', 0)),
+                            ("🌱 Organik", breakdown.get('produk_organik', 0))
+                        ]
+                        for idx, (label, value) in enumerate(categories2):
+                            with cols[idx]:
                                 st.metric(label, f"{value} poin")
                     
-                    # --- ECO-INSIGHT ---
-                    st.markdown("### 💡 Eco-Insight & Saran")
+                    # Insights
                     insights = hasil.get('insight', [])
-                    for idx, insight in enumerate(insights, 1):
-                        st.markdown(f"""
-                        <div class="info-card">
-                            <strong>{idx}.</strong> {insight}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    if insights:
+                        st.markdown("### 💡 Saran Praktis")
+                        for idx, insight in enumerate(insights[:3], 1):
+                            st.markdown(f"**{idx}.** {insight}")
                     
-                    # --- ALTERNATIF RAMAH LINGKUNGAN ---
-                    if 'alternatif' in hasil and hasil['alternatif']:
+                    # Alternatif
+                    alternatif = hasil.get('alternatif', [])
+                    if alternatif:
                         st.markdown("### 🔄 Alternatif Ramah Lingkungan")
-                        for alt in hasil['alternatif']:
+                        for alt in alternatif[:3]:
                             with st.expander(f"🔹 {alt.get('item', 'N/A')} → {alt.get('pengganti', 'N/A')}"):
-                                st.write(f"**Alasan:** {alt.get('alasan', 'Tidak ada informasi')}")
+                                st.success(f"**Alasan:** {alt.get('alasan', '')}")
                     
-                    # --- FAKTA LINGKUNGAN ---
+                    # Fakta
                     if 'fakta_lingkungan' in hasil:
-                        st.markdown("### 🌏 Fakta Lingkungan")
+                        st.markdown("### 🌏 Fakta Menarik")
                         st.info(hasil['fakta_lingkungan'])
-                    
-                    # --- CALL TO ACTION ---
-                    st.markdown("""
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                padding: 2rem; border-radius: 10px; color: white; text-align: center; margin-top: 2rem;">
-                        <h3>🌟 Mulai Langkah Kecilmu untuk Bumi!</h3>
-                        <p>Setiap pilihan belanja yang ramah lingkungan adalah kontribusi nyata untuk masa depan yang lebih hijau.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
 
 else:
-    # Info jika belum ada gambar
-    st.info("👆 **Silakan ambil foto atau upload struk belanja Anda untuk memulai analisis jejak karbon!**")
+    st.info("👆 **Silakan ambil foto atau upload struk belanja untuk memulai analisis!**")
     
     # Tampilkan contoh manfaat
     st.markdown("### 🎯 Apa yang Akan Anda Dapatkan?")
